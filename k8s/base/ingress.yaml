@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: basedrive
+  annotations:
+    # Uploads never pass through the app (presigned PUTs go to storage), so no body-size bump needed.
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  rules:
+    - host: basedrive.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: web, port: { number: 80 } }
+    # Browsers talk to storage directly, so MinIO needs a public host too.
+    - host: s3.basedrive.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: minio, port: { number: 9000 } }

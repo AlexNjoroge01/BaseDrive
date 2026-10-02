@@ -1,15 +1,33 @@
-import { Geist, Geist_Mono, Nunito_Sans } from "next/font/google"
+import type { Metadata, Viewport } from "next"
+import { Figtree, Geist_Mono } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@/lib/utils";
+import { Providers } from "@/components/providers"
+import { cn } from "@/lib/utils"
 
-const nunitoSans = Nunito_Sans({subsets:['latin'],variable:'--font-sans'})
+const figtree = Figtree({
+  subsets: ["latin"],
+  variable: "--font-figtree",
+  display: "swap",
+})
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
 })
+
+export const metadata: Metadata = {
+  title: { default: "BaseDrive", template: "%s · BaseDrive" },
+  description: "Drop a file in, find it again, send it to someone.",
+}
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
+    { media: "(prefers-color-scheme: dark)", color: "#0D1426" },
+  ],
+}
 
 export default function RootLayout({
   children,
@@ -20,10 +38,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", nunitoSans.variable)}
+      className={cn("antialiased", figtree.variable, fontMono.variable)}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <Providers>{children}</Providers>
+        </ThemeProvider>
       </body>
     </html>
   )

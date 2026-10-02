@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels: { app: worker }
+spec:
+  replicas: 1 # SKIP LOCKED makes >1 safe; one is plenty here
+  selector:
+    matchLabels: { app: worker }
+  template:
+    metadata:
+      labels: { app: worker }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      terminationGracePeriodSeconds: 40
+      containers:
+        - name: worker
+          image: ghcr.io/alexnjoroge01/basedrive:latest
+          command: ["node", "dist/worker.mjs"]
+          envFrom:
+            - configMapRef: { name: basedrive-config }
+            - secretRef: { name: basedrive-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { memory: 640Mi } # sharp decodes images in memory

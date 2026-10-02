@@ -1,0 +1,38 @@
+# k3s on Oracle Always Free Ampere A1 (ARM64, 2 OCPU / 12 GB).
+# Multi-arch images from GHCR; TLS via cert-manager + Let's Encrypt.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: basedrive
+resources:
+  - ../../base
+  - cluster-issuer.yaml
+images:
+  - name: ghcr.io/alexnjoroge01/basedrive
+    newTag: latest
+  - name: ghcr.io/alexnjoroge01/basedrive-migrate
+    newTag: latest
+patches:
+  - target: { kind: ConfigMap, name: basedrive-config }
+    patch: |-
+      - op: replace
+        path: /data/APP_URL
+        value: https://drive.example.com
+      - op: add
+        path: /data/S3_PUBLIC_ENDPOINT
+        value: https://s3.drive.example.com
+  - target: { kind: Ingress, name: basedrive }
+    patch: |-
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt
+      - op: replace
+        path: /spec/rules/0/host
+        value: drive.example.com
+      - op: replace
+        path: /spec/rules/1/host
+        value: s3.drive.example.com
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts: [drive.example.com, s3.drive.example.com]
+            secretName: basedrive-tls

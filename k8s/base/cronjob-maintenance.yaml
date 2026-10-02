@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: maintenance
+spec:
+  schedule: "15 3 * * *" # daily: trash purge, stale uploads, guest reset
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          containers:
+            - name: maintenance
+              image: ghcr.io/alexnjoroge01/basedrive:latest
+              command: ["node", "dist/scripts/maintenance.mjs"]
+              envFrom:
+                - configMapRef: { name: basedrive-config }
+                - secretRef: { name: basedrive-secrets }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { memory: 512Mi }

@@ -1,0 +1,39 @@
+# k3d: image imported locally (no registry), small limits, *.localhost hosts.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: basedrive
+resources:
+  - ../../base
+images:
+  - name: ghcr.io/alexnjoroge01/basedrive
+    newName: basedrive
+    newTag: local
+  - name: ghcr.io/alexnjoroge01/basedrive-migrate
+    newName: basedrive-migrate
+    newTag: local
+patches:
+  - target: { kind: Deployment, name: web }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+      - op: add
+        path: /spec/template/spec/initContainers/0/imagePullPolicy
+        value: IfNotPresent
+  - target: { kind: Deployment, name: worker }
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target: { kind: ConfigMap, name: basedrive-config }
+    patch: |-
+      - op: replace
+        path: /data/APP_URL
+        value: http://basedrive.localhost:8080
+      # Server talks to http://minio:9000; presigned URLs use a host the browser can reach.
+      - op: add
+        path: /data/S3_PUBLIC_ENDPOINT
+        value: http://s3.basedrive.localhost:8080
