@@ -242,7 +242,12 @@ function handleFailure(id: string, err: unknown) {
   const message =
     err instanceof ApiClientError
       ? err.message
-      : `Couldn't upload, connection dropped at ${pct}%.`
+      : err instanceof PartError && err.kind === "no-etag"
+        ? "Storage accepted the file but hid its ETag header. Add ETag to ExposeHeaders in the bucket's CORS policy."
+        : err instanceof PartError && err.kind === "blocked" && pct === 0
+          ? // The browser refuses a cross-origin PUT before any bytes move: almost always CORS.
+            `Storage blocked the upload from ${window.location.origin}. Allow PUT from this site in the bucket's CORS policy.`
+          : `Couldn't upload, connection dropped at ${pct}%.`
   patch(id, {
     status: "error",
     error: message,
@@ -252,7 +257,14 @@ function handleFailure(id: string, err: unknown) {
 
 /* ───────────────────────── parts ───────────────────────── */
 
-class PartError extends Error {}
+class PartError extends Error {
+  constructor(
+    message: string,
+    public kind: "blocked" | "no-etag" | "http" | "aborted" | "offline" = "http"
+  ) {
+    super(message)
+  }
+}
 
 async function putPartWithRetry(
   id: string,
@@ -263,10 +275,10 @@ async function putPartWithRetry(
 ): Promise<string> {
   let lastErr: unknown
   for (let attempt = 0; attempt <= PART_RETRIES; attempt++) {
-    if (rt.aborted) throw new PartError("aborted")
+    if (rt.aborted) throw new PartError("aborted", "aborted")
     if (attempt > 0) {
       await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1)))
-      if (!navigator.onLine) throw new PartError("offline")
+      if (!navigator.onLine) throw new PartError("offline", "offline")
     }
     try {
       return await putPart(id, rt, url, blob, partNumber)
@@ -300,7 +312,7 @@ function putPart(
         // Bucket CORS must expose ETag or this is null (the #1 gotcha).
         const etag = xhr.getResponseHeader("ETag")
         if (!etag) {
-          reject(new PartError("Storage didn't expose the ETag header (check bucket CORS)."))
+          reject(new PartError("Storage didn't expose the ETag header (check bucket CORS).", "no-etag"))
           return
         }
         rt.partLoaded.set(partNumber, blob.size)
@@ -312,11 +324,12 @@ function putPart(
     }
     xhr.onerror = () => {
       rt.xhrs.delete(xhr)
-      reject(new PartError("network"))
+      // status 0 + online = the request never got a response the page may read (CORS or network).
+      reject(new PartError("network", "blocked"))
     }
     xhr.onabort = () => {
       rt.xhrs.delete(xhr)
-      reject(new PartError("aborted"))
+      reject(new PartError("aborted", "aborted"))
     }
     xhr.send(blob)
   })

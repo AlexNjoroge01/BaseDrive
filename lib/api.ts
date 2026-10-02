@@ -65,6 +65,14 @@ export function errorResponse(err: unknown) {
       { status: 400 }
     )
   }
+  const storage = describeStorageError(err)
+  if (storage) {
+    console.error("[storage]", err)
+    return NextResponse.json(
+      { error: { code: "STORAGE_ERROR", message: storage } },
+      { status: 502 }
+    )
+  }
   if (isUniqueViolation(err)) {
     return NextResponse.json(
       {
@@ -117,4 +125,35 @@ export async function readJson<T extends z.ZodType>(
     throw new ApiError("VALIDATION", "Request body must be JSON.")
   }
   return schema.parse(body)
+}
+
+/**
+ * Turns S3/R2/MinIO failures into a message that names the cause (unreachable
+ * endpoint, bad credentials, missing bucket) instead of a generic 500.
+ * Never includes secrets: only the endpoint host and the error code.
+ */
+export function describeStorageError(err: unknown): string | null {
+  const e = err as {
+    name?: string
+    code?: string
+    cause?: { code?: string }
+    $metadata?: { httpStatusCode?: number }
+    Code?: string
+  } | null
+  if (!e) return null
+  const netCode = e.code ?? e.cause?.code
+  const isAws = !!e.$metadata || /^(S3|NoSuch|InvalidAccessKeyId|SignatureDoesNotMatch|AccessDenied)/.test(e.name ?? "")
+  const isNet = ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "ECONNRESET"].includes(netCode ?? "")
+  if (!isAws && !isNet) return null
+
+  let host = "storage"
+  try {
+    host = new URL(process.env.S3_ENDPOINT ?? "").host || host
+  } catch {}
+  if (isNet) return `Couldn't reach file storage at ${host} (${netCode}). Check S3_ENDPOINT.`
+  const name = e.name ?? e.Code ?? "StorageError"
+  if (name === "NoSuchBucket") return `The storage bucket "${process.env.S3_BUCKET}" doesn't exist at ${host}.`
+  if (["InvalidAccessKeyId", "SignatureDoesNotMatch", "AccessDenied", "Forbidden"].includes(name) || e.$metadata?.httpStatusCode === 403)
+    return `File storage at ${host} rejected the credentials (${name}). Check S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY.`
+  return `File storage at ${host} returned an error (${name}).`
 }
